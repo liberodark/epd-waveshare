@@ -247,6 +247,85 @@ where
     }
 }
 
+impl<SPI, BUSY, DC, RST, DELAY> Epd7in5<SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    /// Initialize the panel in partial-refresh mode.
+    /// Must be called before `display_partial_frame`.
+    pub fn init_partial(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.interface.reset(delay, 10_000, 2_000);
+
+        self.cmd_with_data(spi, Command::PanelSetting, &[0x1F])?;
+        self.command(spi, Command::PowerOn)?;
+        delay.delay_ms(100);
+        self.wait_until_idle(spi, delay)?;
+
+        self.cmd_with_data(spi, Command::CascadeSetting, &[0x02])?;
+        self.cmd_with_data(spi, Command::ForceTemperature, &[0x6E])?;
+
+        Ok(())
+    }
+
+    /// Refresh a rectangle of the screen. `x` and `width` must be 8-aligned.
+    /// `buffer` size must be `(width / 8) * height`, MSB-first, 1 = white.
+    pub fn display_partial_frame(
+        &mut self,
+        spi: &mut SPI,
+        delay: &mut DELAY,
+        buffer: &[u8],
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Result<(), SPI::Error> {
+        assert_eq!(x % 8, 0);
+        assert_eq!(width % 8, 0);
+        let row_bytes = (width / 8) as usize;
+        assert_eq!(buffer.len(), row_bytes * height as usize);
+
+        self.cmd_with_data(spi, Command::VcomAndDataIntervalSetting, &[0xA9, 0x07])?;
+        self.command(spi, Command::PartialIn)?;
+
+        let x_end = x + width - 1;
+        let y_end = y + height - 1;
+        self.cmd_with_data(
+            spi,
+            Command::PartialWindow,
+            &[
+                (x >> 8) as u8,
+                x as u8,
+                (x_end >> 8) as u8,
+                x_end as u8,
+                (y >> 8) as u8,
+                y as u8,
+                (y_end >> 8) as u8,
+                y_end as u8,
+                0x01,
+            ],
+        )?;
+
+        self.command(spi, Command::DataStartTransmission2)?;
+        let mut chunk = [0u8; 256];
+        for slice in buffer.chunks(chunk.len()) {
+            for (i, &b) in slice.iter().enumerate() {
+                chunk[i] = !b;
+            }
+            self.send_data(spi, &chunk[..slice.len()])?;
+        }
+
+        self.command(spi, Command::DisplayRefresh)?;
+        delay.delay_ms(100);
+        self.wait_until_idle(spi, delay)?;
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

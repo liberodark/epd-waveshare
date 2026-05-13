@@ -128,9 +128,18 @@ pub(crate) enum Command {
     ReadVcomValue = 0x81,
     /// This command sets `VCOM_DC` value.
     VcmDcSetting = 0x82,
-    // /// This is in all the Waveshare controllers for Epd7in5, but it's not documented
-    // /// anywhere in the datasheet `¯\_(ツ)_/¯`
-    // FlashMode = 0xE5,
+
+    /// Partial window selection.
+    PartialWindow = 0x90,
+    /// Enter partial display mode.
+    PartialIn = 0x91,
+    /// Exit partial display mode.
+    PartialOut = 0x92,
+
+    /// Cascade Setting (UC8179).
+    CascadeSetting = 0xE0,
+    /// Force Temperature / waveform mode selector.
+    ForceTemperature = 0xE5,
 }
 
 impl traits::Command for Command {
