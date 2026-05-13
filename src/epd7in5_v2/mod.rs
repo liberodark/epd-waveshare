@@ -324,6 +324,25 @@ where
 
         Ok(())
     }
+
+    /// Disable the panel's power module while keeping SRAM and registers
+    /// intact. Unlike `sleep`, this does NOT issue DeepSleep, so the chip
+    /// can be resumed with `power_on` alone -- no hardware reset, no
+    /// re-initialisation, no loss of the OLD framebuffer.
+    pub fn power_off(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.command(spi, Command::PowerOff)?;
+        self.wait_until_idle(spi, delay)?;
+        Ok(())
+    }
+
+    /// Re-enable the power module after `power_off`. SRAM and register
+    /// state (including partial-mode flag) are preserved across the cycle.
+    pub fn power_on(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.command(spi, Command::PowerOn)?;
+        delay.delay_ms(100);
+        self.wait_until_idle(spi, delay)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
